@@ -9,4 +9,4 @@ Quantitative Information_, 2nd Ed. The script can be found in this repository or
 a few different implementations of Boehmke's work, some changes have been made to reflect the updates made to the packages utilized in this
 report.
 
-[[https://github.com/nktbinh/Hanoi_2017_Weather/blob/master/Final.png|alt=Final]]
+[https://user-images.githubusercontent.com/29718951/29010547-545cb952-7ae9-11e7-9f18-c190ee4af8bf.png]
