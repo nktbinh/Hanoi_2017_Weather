@@ -1,13 +1,57 @@
+---
+output:
+  html_document:
+    fig_caption: true
+    template: html-github.template
+fontfamily: mathpazo
+fontsize: 11pt
+tables: yes
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load Required Packages
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(grid)
 library(lubridate)
 
-"http://academic.udayton.edu/kissock/http/Weather/gsod95-current/VSHANOI.txt"%>%
-  read.table() %>% data.frame %>% tbl_df ->data
-names(data)<-c("month","day","year","tempF")
+# Load the data
+data <- "http://academic.udayton.edu/kissock/http/Weather/gsod95-current/VSHANOI.txt"%>%
+  read.table() %>% 
+  data.frame %>% 
+  tbl_df
 
+names(data)<-c("month","day","year","tempF")
+```
+Hanoi 2017 Weather Using R
+============================================
+_Binh Nguyen
+August 2017_
+
+This project is inspired by the popular illustration of [New York city 2003 weather](https://www.edwardtufte.com/bboard/q-and-a-fetch-msg?msg_id=00014g) by Edward Tufte and [this blogpost](https://rpubs.com/bradleyboehmke/weather_graphic). 
+
+## The Data
+The data used is available on the University of Dayton's [Average Daily Temperature Archive](http://academic.udayton.edu/kissock/http/Weather/citylistWorld.htm) website which contains daily average temperatures for 157 U.S. and 167 international cities with data spanning from January 1st, 1995 to present. [Hanoi](http://academic.udayton.edu/kissock/http/Weather/gsod95-current/VSHANOI.txt) data comes in the form of a text file with spaced-delineated columns representing the day, month year and average temperature. Because of this the graphic present in this project is based on daily average temperature as opposed to daily high and low temperatures as seen in the original visualization by Tufte. The R code to follow through with this project can be found [here]() which draws from Boehmke's post but also includes a few fixes to reflect the changes to the _dplyr_ package ever since the blogpost was written, and some original code. 
+
+##R Packages
+The following packages were utilized to develop the visualization
+```{r, eval = FALSE}
+# Preprocessing & summarizing data
+library(dplyr)
+library(tidyr)
+library(lubridate)
+
+# Visualizatin development
+library(ggplot2)
+library(grid)
+```
+
+##Pre-process
+Preparation and creation of several intermediate data sets are as follow.
+
+```{r, warning = FALSE}
+# create additional column to represent temperature in Celsius
 data <- data%>%
   mutate(tempC=(tempF-32)*5/9)
 
@@ -18,11 +62,11 @@ data2 <- data %>%
   
 data3<-merge(data,data2, by = c("year","month","day"))
 
-# Past Years
+# Dataframe consisting of 22 years of historical temp data from 1995 to 2016
 past <- data3 %>%
   group_by(year) %>%
   arrange(yday) %>%
-  rename(newday = yday) %>%   # label days as 1:365 (will represent x-axis)         
+  rename(newday = yday) %>%   # label days as 1:365 (will represent x-axis)     
   ungroup() %>%
   filter(tempF!=-99 & year!=2017)%>%
   group_by(newday)%>%
@@ -38,32 +82,36 @@ past <- data3 %>%
 present <- data3 %>%
   group_by(year) %>%
   arrange(yday) %>%
-  rename(newday = yday) %>%   # label days as 1:365 (will represent x-axis)         
+  rename(newday = yday) %>%   # label days as 1:365 (will represent x-axis)     
   ungroup() %>%
-  filter(tempF != -99 & year == 2017) # filter out missing data & select current year data  
+  filter(tempF != -99 & year == 2017) # keep non-missing and current year data  
 
-# Create data frame that represents the lowest temp for each day of the historical data:
+# Create a dataframe that represents the lowest temp for each day of the historical data:
 pastlows <- past %>%
   group_by(newday) %>%
   summarise(Pastlow=min(tempC))
 
-# Create a data frame that identifies the day in 2017 in which the temps were lower than all previous 22 years:
+# Create a dataframe that identifies the day in 2017 in which the temps were lower than all previous 22 years:
 presentlows<-present %>%
   left_join(pastlows) %>%
   mutate(record = ifelse(tempC<Pastlow,"Y","N")) %>%
   filter(record == "Y")
 
-# Create a data frame that represents the highest temp for each day for the historical data:
+# Create a dataframe that represents the highest temp for each day for the historical data:
 pasthighs <- past %>%
   group_by(newday) %>%
   summarise(Pasthigh = max(tempC))
 
-# Create a data frame that identifies the day in 2017 in which the temps were higher than all previous 22 years:
+# Create a dataframe that identifies the day in 2017 in which the temps were higher than all previous 22 years:
 presenthighs<- present %>%
   left_join(pasthighs) %>%
   mutate(record=ifelse(tempC>Pasthigh,"Y","N")) %>%
   filter(record=="Y")
+```
 
+In additions, we also need to generate y-axis labels with proper notation (degree symbol °) as well the legend symbol for 2017 Temperature.
+
+```{r, warning = FALSE}
 # Utility function to format y-axis labels with degree notation
 dgr_fmt <- function(x, ...) {
   parse(text = paste(x, "*degree", sep = ""))
@@ -72,10 +120,16 @@ dgr_fmt <- function(x, ...) {
 # Create y-axis variable:
 a <- dgr_fmt(seq(5,40, by=5))
 
+# create a small dataframe to represent legend symbol for 2017 Temperature
 legend_data <- data.frame(x=seq(168,177),y=rnorm(10,12.5,1))
+```
 
-# ------------------------------------------------------------
+# Visualization
+To quote Boehmke: "graphics should be built on layers because it helps you to organize visual steps and forces you to think about smaller details and where, in the graphic building process, they shoudl be developed". I will demonstrate the construction of each layer via multiple steps, each one with a snippet of code.
 
+**Step 1** : Create the canvas showing 22 years record highs and lows as background
+
+```{r, warning = FALSE}
 p <- ggplot(past,aes(newday,tempC))+
   theme(plot.background = element_blank(),
         panel.grid.major = element_blank(),
@@ -87,20 +141,26 @@ p <- ggplot(past,aes(newday,tempC))+
   geom_linerange(past, 
                  mapping=aes(x=newday,ymin=lower,ymax=upper),
                  size = 0.9, color = "wheat2", alpha=.1)
+```
 
-ggsave("Step1", p, device = "png", width = 16, height = 12)
+**Step 2** : Add the data that represents 95% confidence interval around the daily mean temperatures for 1995 - 2016
 
-p1 <- p + geom_linerange(past, mapping=aes(x=newday, ymin=avg_lower, ymax=avg_upper), colour = "#A57E69")
+```{r, warning = FALSE}
+p <- p + geom_linerange(past, mapping=aes(x=newday, ymin=avg_lower, ymax=avg_upper), colour = "#A57E69")
+```
 
-ggsave("Step2", p1, device = "png", width = 16, height = 12)
+**Step 3** : Incorporate current year's temperature
 
-p2 <- p1 +
+```{r, warning = FALSE}
+p <- p +
   geom_line(present, mapping=aes(x=newday, y=tempC, group=1), color = "#4A2123", size = 1) +
   geom_vline(xintercept = 0, colour = "wheat4", linetype=1, size=1)
+```
 
-ggsave("Step3", p2, device = "png", width = 16, height = 12)
+**Step 4** : Add y-axis gridlines for reference
 
-p3 <- p2 + geom_hline(yintercept = 5, colour = "ivory2", linetype=1, size = .1) +
+```{r, warning = FALSE}
+p <- p + geom_hline(yintercept = 5, colour = "ivory2", linetype=1, size = .1) +
   geom_hline(yintercept = 10, colour = "ivory2", linetype=1, size = .1) +
   geom_hline(yintercept = 15, colour = "ivory2", linetype=1, size = .1) +
   geom_hline(yintercept = 20, colour = "ivory2", linetype=1, size = .1) +
@@ -108,10 +168,12 @@ p3 <- p2 + geom_hline(yintercept = 5, colour = "ivory2", linetype=1, size = .1) 
   geom_hline(yintercept = 30, colour = "ivory2", linetype=1, size = .1) +
   geom_hline(yintercept = 35, colour = "ivory2", linetype=1, size = .1) +
   geom_hline(yintercept = 40, colour = "ivory2", linetype=1, size = .1)
+```
 
-ggsave("Step4", p3, device = "png", width = 16, height = 12)
+**Step 5**: Add x-axis gridlines to represent last day of each month
 
-p4 <- p3 +
+```{r, warning = FALSE}
+p <- p +
   geom_vline(xintercept = 31, colour = "wheat4", linetype=3, size=.5) +
   geom_vline(xintercept = 59, colour = "wheat4", linetype=3, size=.5) +
   geom_vline(xintercept = 90, colour = "wheat4", linetype=3, size=.5) +
@@ -124,10 +186,12 @@ p4 <- p3 +
   geom_vline(xintercept = 304, colour = "wheat4", linetype=3, size=.5) +
   geom_vline(xintercept = 334, colour = "wheat4", linetype=3, size=.5) +
   geom_vline(xintercept = 365, colour = "wheat4", linetype=3, size=.5)
+```
 
-ggsave("Step5", p4, device = "png", width = 16, height = 12)
+**Step 6** : Fromat the axis labels
 
-p5 <- p4 +
+```{r, warning = FALSE}
+p <- p +
   coord_cartesian(ylim = c(5,40)) +
   scale_y_continuous(breaks = seq(5,40, by=5), labels = a) +
   scale_x_continuous(expand = c(0, 0),
@@ -135,16 +199,20 @@ p5 <- p4 +
                      labels = c("Jan", "Feb", "March", "April",
                                 "May", "June", "July", "Aug", "Sep",
                                 "Oct", "Nov", "Dec"))
+```
 
-ggsave("Step6", p5, device = "png", width = 16, height = 12)
+**Step 7** : Add current year's record high and low temperature
 
-p6 <- p5 +
+```{r, warning = FALSE}
+p <- p +
   geom_point(data=presentlows, aes(x=newday, y=tempC), colour="blue3") +
   geom_point(data=presenthighs, aes(x=newday, y=tempC), colour="firebrick3")
+```
 
-ggsave("Step7", p6, device = "png", width = 16, height = 12)
+**Step 8** : Add title & sub-titles
 
-p7 <- p6 +
+```{r, warning = FALSE}
+p <- p +
   ggtitle("Hanoi's weather in 2017") +
   theme(plot.title=element_text(face="bold",hjust=.012,vjust=.8,colour="gray30",size=18))
   
@@ -158,10 +226,12 @@ grob2 = grobTree(textGrob(paste("Data represents average daily temperatures. Acc
                           x=0.01, y=0.89, hjust=0,
                           gp=gpar(col="gray30", fontsize = 9)))
 
-p7 <- p7 + annotation_custom(grob1) + annotation_custom(grob2)
+p <- p + annotation_custom(grob1) + annotation_custom(grob2)
+```
 
-ggsave("Step8", p7, device = "png", width = 16, height = 12)
+**Step 9** : Add annotations at record highs. Notice the high concentration of points in early June. This coincides with the [heat wave](https://www.wunderground.com/cat6/historic-heat-wave-sweeps-asia-middle-east-and-europe) which was sweeping through asia at the time
 
+```{r, warning = FALSE}
 grob3 = grobTree(textGrob(paste("In 2017 there have been 8 days\n",
                                 "that were hottest since 1995\n",sep=""),
                           x=0.12, y=0.68, hjust=0,
@@ -172,14 +242,17 @@ grob4 = grobTree(textGrob(paste("Intense heatwave sets unprecedented record\n",
                           x=0.45, y=0.83, hjust=0,
                           gp=gpar(col="firebrick3", fontsize=9)))
 
-p8 <- p7 + annotation_custom(grob3) + annotation_custom(grob4)
-p8 <- p8 +
+p <- p + annotation_custom(grob3) + annotation_custom(grob4)
+
+p <- p +
   annotate("segment", x = 156, xend = 165, y = 35, yend = 36, colour = "firebrick3") +
   annotate("segment", x = 53, xend = 53, y = 26, yend = 28, colour = "firebrick3")
+```
 
-ggsave("Step9", p8, device = "png", width = 16, height = 12)
+**Step 10** : Add legend to explain the main 3 layers of data
 
-p9 <- p8 +
+```{r, warning = FALSE, fig.width=13, fig.height=7}
+p <- p +
   annotate("segment", x = 181, xend = 181, y = 5, yend = 20, colour = "wheat2", size=3) +
   annotate("segment", x = 181, xend = 181, y = 9, yend = 16, colour = "#A57E69", size=3) +
   geom_line(data=legend_data, aes(x=x,y=y)) +
@@ -191,4 +264,6 @@ p9 <- p8 +
   annotate("text", x = 193, y = 20, label = "RECORD HIGH", size=4, colour="gray30") +
   annotate("text", x = 193, y = 5, label = "RECORD LOW", size=4, colour="gray30")
 
-ggsave("Step10", p9, device = "png", width = 16, height = 12)
+print(p)
+```
+
